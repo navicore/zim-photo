@@ -11,7 +11,9 @@ mod metadata_merger;
 mod test_pipeline;
 mod test_single_file;
 mod sidecar_writer;
+mod sidecar_reader;
 mod ollama_vision;
+mod find_good_test_day;
 
 #[derive(Parser)]
 #[command(name = "zim-photo")]
@@ -44,6 +46,10 @@ enum Commands {
         /// Use AI (Ollama) to generate descriptions and tags
         #[arg(short, long)]
         ai: bool,
+        
+        /// Minimum rating for AI analysis (1-5)
+        #[arg(long, help = "Only use AI for photos with this rating or higher")]
+        ai_min_rating: Option<i32>,
     },
     
     /// Test the metadata pipeline
@@ -52,6 +58,13 @@ enum Commands {
         #[arg(default_value = "tmp")]
         directory: String,
     },
+    
+    /// Find days with multiple high-rated photos for testing
+    FindTestDays {
+        /// Path to Lightroom catalog
+        #[arg(short, long, default_value = "data/lr/lightroom_main.lrcat")]
+        catalog: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -59,17 +72,20 @@ fn main() -> Result<()> {
     let catalog_path = "data/lr/lightroom_main.lrcat";
     
     match cli.command {
-        Commands::Update { directory, catalog, progress, force, ai } => {
+        Commands::Update { directory, catalog, progress, force, ai, ai_min_rating } => {
             if ai {
                 // Check if Ollama is available
                 if !ollama_vision::check_ollama_available()? {
-                    println!("⚠️  Warning: Ollama is not running or llama3.2-vision is not available");
+                    println!("⚠️  Warning: Ollama is not running or qwen2.5vl is not available");
                     println!("   Make sure Ollama is running: ollama serve");
-                    println!("   And the model is pulled: ollama pull llama3.2-vision");
+                    println!("   And the model is pulled: ollama pull qwen2.5vl");
                     return Ok(());
                 }
+                if let Some(rating) = ai_min_rating {
+                    println!("🎯 AI analysis enabled for photos with rating ≥ {}", rating);
+                }
             }
-            sidecar_writer::process_directory(&directory, &catalog, !force, progress, ai)?;
+            sidecar_writer::process_directory(&directory, &catalog, !force, progress, ai, ai_min_rating)?;
         }
         Commands::Test { directory } => {
             if std::path::Path::new(&directory).exists() {
@@ -78,6 +94,9 @@ fn main() -> Result<()> {
                 println!("⚠️  Test directory '{}' not found", directory);
                 test_lookup::test_multiple_lookups(catalog_path)?;
             }
+        }
+        Commands::FindTestDays { catalog } => {
+            find_good_test_day::find_test_days(&catalog)?;
         }
     }
     

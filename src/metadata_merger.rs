@@ -70,6 +70,7 @@ impl PhotoMetadata {
         
         // Add AI analysis if available (kept separate from human content)
         if let Some(ref ai) = self.ai_analysis {
+            println!("  💾 Saving AI data: {} desc, {} tags", ai.description.len(), ai.tags.len());
             // AI description is always separate from human caption/title
             if !ai.description.is_empty() {
                 self.merged_data.insert("ai_description".to_string(), ai.description.clone());
@@ -79,6 +80,8 @@ impl PhotoMetadata {
             if !ai.tags.is_empty() {
                 self.merged_data.insert("ai_tags".to_string(), ai.tags.join(", "));
             }
+        } else {
+            println!("  ❌ No AI analysis to save");
         }
         
         // Add source info
@@ -249,6 +252,7 @@ pub fn extract_metadata_verbose(photo: &PhotoFile, lr_conn: Option<&Connection>,
     
     // Try AI analysis if requested
     if use_ai {
+        println!("  🤖 Starting AI analysis for: {}", photo.filename);
         match analyze_image(&photo.path) {
             Ok(analysis) => {
                 metadata.ai_analysis = Some(analysis);
@@ -257,9 +261,7 @@ pub fn extract_metadata_verbose(photo: &PhotoFile, lr_conn: Option<&Connection>,
                 }
             },
             Err(e) => {
-                if verbose {
-                    println!("  ⚠️  AI analysis failed: {}", e);
-                }
+                println!("  ❌ AI analysis failed: {:?}", e);
             }
         }
     }

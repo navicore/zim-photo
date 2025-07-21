@@ -20,9 +20,9 @@ impl SidecarWriter {
     }
     
     /// Write a sidecar .md file for a photo
-    pub fn write_sidecar(&mut self, sidecar_path: &Path, metadata: &PhotoMetadata) -> Result<()> {
-        // Skip if sidecar already exists
-        if sidecar_path.exists() {
+    pub fn write_sidecar(&mut self, sidecar_path: &Path, metadata: &PhotoMetadata, force: bool) -> Result<()> {
+        // Skip if sidecar already exists and not forcing
+        if sidecar_path.exists() && !force {
             self.files_skipped += 1;
             return Ok(());
         }
@@ -87,6 +87,7 @@ pub fn process_directory(
     skip_existing: bool,
     show_progress: bool,
     use_ai: bool,
+    ai_min_rating: Option<i32>,
 ) -> Result<()> {
     use crate::photo_walker::PhotoWalker;
     use crate::metadata_merger::extract_metadata_verbose;
@@ -124,17 +125,60 @@ pub fn process_directory(
             io::stdout().flush()?;
         }
         
-        // Extract metadata
-        match extract_metadata_verbose(photo, Some(&lr_conn), false, use_ai) {
-            Ok(metadata) => {
-                // Write sidecar
-                if let Err(e) = writer.write_sidecar(&photo.sidecar_path, &metadata) {
-                    writer.errors.push(format!("{}: {}", photo.filename, e));
-                }
-            }
+        // Extract metadata - first without AI to get rating
+        let mut metadata = match extract_metadata_verbose(photo, Some(&lr_conn), false, false) {
+            Ok(m) => m,
             Err(e) => {
                 writer.errors.push(format!("{}: Failed to extract metadata: {}", photo.filename, e));
+                continue;
             }
+        };
+        
+        // Check if we should use AI based on rating
+        let should_use_ai = if use_ai {
+            if let Some(min_rating) = ai_min_rating {
+                // First try to get rating from existing sidecar (if it exists)
+                let rating = if photo.sidecar_path.exists() {
+                    use crate::sidecar_reader::get_sidecar_rating;
+                    get_sidecar_rating(&photo.sidecar_path)
+                        .map(|r| r as f64)
+                } else {
+                    None
+                };
+                
+                // Fall back to Lightroom rating if no sidecar
+                let rating = rating.or_else(|| {
+                    metadata.lightroom_data.get("lr_rating")
+                        .and_then(|r| r.parse::<f64>().ok())
+                });
+                
+                rating.map(|r| r >= min_rating as f64).unwrap_or(false)
+            } else {
+                // No rating filter, use AI for all
+                true
+            }
+        } else {
+            false
+        };
+        
+        // If we should use AI and haven't already, get AI analysis
+        if should_use_ai && metadata.ai_analysis.is_none() {
+            // Check if sidecar already has AI data
+            use crate::sidecar_reader::has_ai_metadata;
+            let already_has_ai = photo.sidecar_path.exists() && has_ai_metadata(&photo.sidecar_path);
+            
+            if !already_has_ai {
+                use crate::ollama_vision::analyze_image;
+                if let Ok(analysis) = analyze_image(&photo.path) {
+                    metadata.ai_analysis = Some(analysis);
+                    metadata.merge(); // Re-merge to include AI data
+                }
+            }
+        }
+        
+        // Write sidecar
+        if let Err(e) = writer.write_sidecar(&photo.sidecar_path, &metadata, !skip_existing) {
+            writer.errors.push(format!("{}: {}", photo.filename, e));
         }
     }
     

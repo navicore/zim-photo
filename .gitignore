@@ -1,3 +1,25 @@
 /target
 /data
 /tmp
+
+# Test directories and files
+/test_one
+/test_ratings
+test_*.sh
+test_*.jpg
+test_*.md
+test.sh
+
+# Image files that might be created during testing
+*.jpg
+*.CR2
+*.DNG
+*.tif
+*.psd
+
+# Sidecar files (keep these in your archive, not in git)
+*.CR2.md
+*.DNG.md
+*.jpg.md
+*.tif.md
+*.psd.md
