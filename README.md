@@ -1,3 +1,8 @@
+<!-- ghmig:moved -->
+> **This repository has moved to [https://git.navicore.tech/navicore/zim-photo](https://git.navicore.tech/navicore/zim-photo).**
+>
+> The GitHub copy is archived and no longer maintained.
+
 # zim-photo
 
 A Rust CLI tool for managing photo metadata through markdown sidecar files. Extract metadata from EXIF, Adobe Lightroom catalogs, and AI vision analysis to create portable, human-readable `.md` files for each photo.
